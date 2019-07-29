@@ -2,6 +2,7 @@ package com.jht.heartratetest;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattServer;
@@ -14,8 +15,10 @@ import android.bluetooth.le.AdvertiseSettings;
 import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Looper;
+import android.os.ParcelUuid;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
@@ -31,17 +34,18 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.jht.heartratetest.utils.DateUtils;
 import com.jht.heartratetest.utils.ToastUtils;
 
+import java.util.Arrays;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     public static UUID UUID_SERVICE = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb");
-    public static UUID UUID_CHARACTERISTIC_ONE = UUID.fromString("00002A39-0000-1000-8000-00805f9b34fb");
-    public static UUID UUID_CHARACTERISTIC_TWO = UUID.fromString("00002A38-0000-1000-8000-00805f9b34fb");
-    public static UUID UUID_CHARACTERISTIC_THREE = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb");
-    public static UUID UUID_CHARACTERISTIC_THREE_Descriptor = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-    private String TAG = "TestSelf";
+    public static UUID UUID_CHARACTERISTIC_CONTROLPOINT = UUID.fromString("00002A39-0000-1000-8000-00805f9b34fb");
+    public static UUID UUID_CHARACTERISTIC_LOCATION = UUID.fromString("00002A38-0000-1000-8000-00805f9b34fb");
+    public static UUID UUID_CHARACTERISTIC_MEASUREMENT = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb");
+    public static UUID UUID_CHARACTERISTIC_MEASUREMENT_Descriptor = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+    private String TAG = "TestStage";
     private boolean Flag = false;
     private TextView tvDataMonitoring;
     private Button btnSendAd, btnStopSendAd;
@@ -62,8 +66,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private BluetoothGattCharacteristic mGattCharacteristic, mGattCharacteristicTwo, mGattCharacteristicThree;
     //GattService回调
     private BluetoothGattServerCallback mGattServerCallback;
-    //
+
     private BluetoothGattServer mGattServer;
+    //初始化蓝牙管理者
     private BluetoothManager mBluetoothManager;
     //特征的描述
     private BluetoothGattDescriptor mBluetoothGattDescriptor;
@@ -85,7 +90,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 if (b) {
+                    initBle();
+
                     startAdvertise();//广播
+
                     addGattService();//服务
                     ToastUtils.showBottomToast(MainActivity.this, "请连接本设备");
                 } else {
@@ -122,6 +130,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      *初始化蓝牙
      * */
     private void initBle() {
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            ToastUtils.showBottomToast(this, "手机不支持BLE");
+            finish();// 如果手机不支持BLE就关闭程序
+        }
+
         if (mBluetoothAdapter != null && !mBluetoothAdapter.isEnabled()) {
             Intent enableBtIntent = new Intent(
                     BluetoothAdapter.ACTION_REQUEST_ENABLE);
@@ -132,13 +145,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     //开启广播
     private void startAdvertise() {
         //设置蓝牙名称
-        mBluetoothAdapter.setName("FakeHeartRate");
+        mBluetoothAdapter.setName("HeartRateX");
         //初始化广播设置
         mAdvertiseSettings = new AdvertiseSettings.Builder()
                 //设置广播模式，以控制广播的功率和延迟。
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
                 //发射功率级别
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
                 //不得超过180000毫秒。值为0将禁用时间限制。
                 .setTimeout(0)
                 //设置是否可以连接
@@ -151,11 +164,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 //设置发射功率级别
                 .setIncludeDeviceName(true)
                 //设置UUID
-                // .addServiceUuid()
+                .addServiceUuid(new ParcelUuid(UUID_SERVICE))
                 .build();
 
         //获取BLE广播的操作对象。
-        //如果蓝牙关闭或此设备不支持蓝牙LE广播，则返回null。
+        //如果蓝牙关闭或此设备不支持蓝牙BLE广播，则返回null。
         mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
         //mBluetoothLeAdvertiser不为空，且蓝牙已开打
         if (mBluetoothAdapter.isEnabled()) {
@@ -163,8 +176,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 //开启广播
                 mBluetoothLeAdvertiser.startAdvertising(mAdvertiseSettings,
                         mAdvertiseData, mAdvertiseCallback);
-            } else {
-                Log.d(TAG, "该手机不支持ble广播");
+                Log.d(TAG, "广播开启");
+            } else if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+                addText(tvDataMonitoring, "该手机不支持ble广播");
             }
         } else {
             Log.d(TAG, "手机蓝牙未开启");
@@ -180,25 +194,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mGattService = new BluetoothGattService(UUID_SERVICE,
                 BluetoothGattService.SERVICE_TYPE_PRIMARY);
         //初始化特征值
-        mGattCharacteristic = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_ONE, BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY);
-        mGattCharacteristicTwo = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_TWO, BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY);
-        mGattCharacteristicThree = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_THREE, BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY);
+        mGattCharacteristic = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_CONTROLPOINT,
+                BluetoothGattCharacteristic.PROPERTY_WRITE,
+                BluetoothGattCharacteristic.PERMISSION_WRITE);
+        mGattCharacteristicTwo = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_LOCATION,
+                BluetoothGattCharacteristic.PROPERTY_READ,
+                BluetoothGattCharacteristic.PERMISSION_READ);
+        mGattCharacteristicThree = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_MEASUREMENT,
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                0);
         //为service 添加特征
         mGattService.addCharacteristic(mGattCharacteristic);
         mGattService.addCharacteristic(mGattCharacteristicTwo);
         mGattService.addCharacteristic(mGattCharacteristicThree);
         //为特征添加描述
-        mBluetoothGattDescriptor = new BluetoothGattDescriptor(UUID_CHARACTERISTIC_THREE_Descriptor, BluetoothGattDescriptor.PERMISSION_WRITE | BluetoothGattCharacteristic.PERMISSION_READ);
+        mBluetoothGattDescriptor = new BluetoothGattDescriptor(UUID_CHARACTERISTIC_MEASUREMENT_Descriptor, BluetoothGattDescriptor.PERMISSION_READ | BluetoothGattDescriptor.PERMISSION_WRITE);
         mGattCharacteristicThree.addDescriptor(mBluetoothGattDescriptor);
 
         //添加服务
         mGattServerCallback = new HRBluetoothGattServerCallback();
-        mGattServer = mBluetoothManager.openGattServer(MainActivity.this, mGattServerCallback);
-        mGattServer.addService(mGattService);
 
+        try {
+            mGattServer = mBluetoothManager.openGattServer(MainActivity.this, mGattServerCallback);
+        } catch (Exception e) {
+            Log.d(TAG, "addGattService: " + e.toString());
+        }
+        mGattServer.addService(mGattService);
 
     }
 
@@ -219,11 +240,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-
     /*
      *广播回调
      * */
-    private class HRAdvertiseCallback extends AdvertiseCallback {
+    class HRAdvertiseCallback extends AdvertiseCallback {
         //开启广播成功回调
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
@@ -239,25 +259,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-
     /*
-     * Gatt回调
+     * Gatt连接回调
      * */
-    private class HRBluetoothGattServerCallback extends BluetoothGattServerCallback {
+    class HRBluetoothGattServerCallback extends BluetoothGattServerCallback {
 
         //设备连接/断开连接回调
         @Override
-        public void onConnectionStateChange(BluetoothDevice device, int status, final int newState) {
+        public void onConnectionStateChange(BluetoothDevice device, final int status, final int newState) {
             mBluetoothDevice = device;
             Log.i(TAG, device.toString());
             //直接将判断语句写在主线程中，会导致跳过判断
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    if (newState == 2) {
-                        addText(tvDataMonitoring, "设备已连接！" + DateUtils.getTime());
-                    } else {
-                        addText(tvDataMonitoring, "连接已断开！" + DateUtils.getTime());
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        if (newState == BluetoothGatt.STATE_CONNECTED) {
+                            addText(tvDataMonitoring, "设备已连接！" + DateUtils.getTime());
+                        } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                            addText(tvDataMonitoring, "连接已断开！" + DateUtils.getTime());
+                        }
                     }
                 }
             });
@@ -275,6 +296,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public void onCharacteristicReadRequest(BluetoothDevice device, int requestId, int offset, BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicReadRequest(device, requestId, offset, characteristic);
+            if (offset != 0) {
+                mGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_OFFSET, offset,
+                        /* value (optional) */ null);
+                return;
+            }
+            mGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS,
+                    offset, characteristic.getValue());
         }
 
         //特征值写入回调
@@ -286,7 +314,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //描述读取回调
         @Override
         public void onDescriptorReadRequest(BluetoothDevice device, int requestId, int offset, BluetoothGattDescriptor descriptor) {
-
             super.onDescriptorReadRequest(device, requestId, offset, descriptor);
         }
 
@@ -294,7 +321,46 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public void onDescriptorWriteRequest(BluetoothDevice device, int requestId, BluetoothGattDescriptor descriptor, boolean preparedWrite, boolean responseNeeded, int offset, byte[] value) {
             super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value);
+            Log.v(TAG, "Descriptor Write Request " + descriptor.getUuid() + " " + Arrays.toString(value));
+            int status = BluetoothGatt.GATT_SUCCESS;
+            if (descriptor.getUuid() == UUID_CHARACTERISTIC_MEASUREMENT_Descriptor) {
+                BluetoothGattCharacteristic characteristic = descriptor.getCharacteristic();
+                boolean supportsNotifications = (characteristic.getProperties() &
+                        BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0;
+                boolean supportsIndications = (characteristic.getProperties() &
+                        BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0;
+                if (!(supportsNotifications || supportsIndications)) {
+                    status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED;
+                } else if (value.length != 2) {
+                    status = BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH;
+                } else if (Arrays.equals(value, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
+                    status = BluetoothGatt.GATT_SUCCESS;
+                    //  mCurrentServiceFragment.notificationsDisabled(characteristic);
+                    descriptor.setValue(value);
+                } else if (supportsNotifications &&
+                        Arrays.equals(value, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
+                    status = BluetoothGatt.GATT_SUCCESS;
+                    // mCurrentServiceFragment.notificationsEnabled(characteristic, false /* indicate */);
+                    descriptor.setValue(value);
+                } else if (supportsIndications &&
+                        Arrays.equals(value, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
+                    status = BluetoothGatt.GATT_SUCCESS;
+                    // mCurrentServiceFragment.notificationsEnabled(characteristic, true /* indicate */);
+                    descriptor.setValue(value);
+                } else {
+                    status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED;
+                }
+            } else {
+                status = BluetoothGatt.GATT_SUCCESS;
+                descriptor.setValue(value);
+            }
+            if (responseNeeded) {
+                mGattServer.sendResponse(device, requestId, status,
+                        /* No need to respond with offset */ 0,
+                        /* No need to respond with a value */ null);
+            }
         }
+
     }
 
     /*
@@ -326,8 +392,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     public void run() {
                         try {
                             mGattCharacteristicThree.setValue(Integer.valueOf(getHeartRateValue()),
-                                    BluetoothGattCharacteristic.FORMAT_UINT8,
-                                    /* offset */ 1);
+                                    BluetoothGattCharacteristic.FORMAT_UINT8, 1);
                             mGattServer.notifyCharacteristicChanged(mBluetoothDevice, mGattCharacteristicThree, false);//true表示从客户端请求确认（指示），false表示发送通知
                         } catch (NullPointerException e) {
                             Looper.prepare();

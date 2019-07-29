@@ -2,7 +2,10 @@ package com.jht.heartratetest.utils;
 
 import android.content.Context;
 import android.widget.Toast;
-
+/*
+*
+* 单例toast，不重复弹出
+* */
 public class ToastUtils {
   private static Toast mToast;
     public static void showBottomToast(Context context, String string) {
