@@ -54,13 +54,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     private AdvertiseSettings mAdvertiseSettings;
-    private AdvertiseData mAdvertiseData;
+    private AdvertiseData mAdvertiseData, mAdvScanResponse;
+
     private HRAdvertiseCallback mAdvertiseCallback = new HRAdvertiseCallback();
-    //蓝牙设备，代表一个具体的蓝牙外设。
+    //蓝牙设备
     private BluetoothDevice mBluetoothDevice;
     //BLE广播操作类
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
-    //Gatt服务，一个服务多个特征
+    //Gatt服务
     private BluetoothGattService mGattService;
     //Gatt特征
     private BluetoothGattCharacteristic mGattCharacteristic, mGattCharacteristicTwo, mGattCharacteristicThree;
@@ -84,17 +85,19 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btnStopSendAd = findViewById(R.id.stopSendAd);
         tbStart = findViewById(R.id.startAd);
         heartRateValue = findViewById(R.id.heartRate);
-        initBle();//蓝牙
+        //初始化蓝牙
+        initBle();
+        //初始化模拟设备，广播包
+        initAdvertise();
+        //初始化GATT服务   蓝牙官方文档:A Heart Rate Sensor instantiates one and only one Heart Rate Service andinstantiates one Device Information Service
+        addGattService();
         //扫描广播开关
         tbStart.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 if (b) {
                     initBle();
-
                     startAdvertise();//广播
-
-                    addGattService();//服务
                     ToastUtils.showBottomToast(MainActivity.this, "请连接本设备");
                 } else {
                     mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
@@ -110,6 +113,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btnStopSendAd.setOnClickListener(this);
 
     }
+
 
     /*
      * 获取用户输入的值
@@ -142,14 +146,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    //开启广播
-    private void startAdvertise() {
+    /*
+     *初始化广播
+     * */
+    private void initAdvertise() {
         //设置蓝牙名称
         mBluetoothAdapter.setName("HeartRateX");
         //初始化广播设置
         mAdvertiseSettings = new AdvertiseSettings.Builder()
                 //设置广播模式，以控制广播的功率和延迟。
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                 //发射功率级别
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
                 //不得超过180000毫秒。值为0将禁用时间限制。
@@ -162,11 +168,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 //设置广播设备名称
                 .setIncludeDeviceName(true)
                 //设置发射功率级别
-                .setIncludeDeviceName(true)
+                .setIncludeTxPowerLevel(false)
+                .build();
+        //初始化扫描响应包
+        mAdvScanResponse = new AdvertiseData.Builder()
                 //设置UUID
                 .addServiceUuid(new ParcelUuid(UUID_SERVICE))
                 .build();
 
+    }
+
+    //开启广播
+    private void startAdvertise() {
         //获取BLE广播的操作对象。
         //如果蓝牙关闭或此设备不支持蓝牙BLE广播，则返回null。
         mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
@@ -175,7 +188,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             if (mBluetoothLeAdvertiser != null) {
                 //开启广播
                 mBluetoothLeAdvertiser.startAdvertising(mAdvertiseSettings,
-                        mAdvertiseData, mAdvertiseCallback);
+                        mAdvertiseData, mAdvScanResponse, mAdvertiseCallback);
                 Log.d(TAG, "广播开启");
             } else if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
                 addText(tvDataMonitoring, "该手机不支持ble广播");
@@ -393,6 +406,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         try {
                             mGattCharacteristicThree.setValue(Integer.valueOf(getHeartRateValue()),
                                     BluetoothGattCharacteristic.FORMAT_UINT8, 1);
+                         /*   mGattCharacteristicThree.setValue(1,
+                                    BluetoothGattCharacteristic.FORMAT_UINT16, 0);*/
                             mGattServer.notifyCharacteristicChanged(mBluetoothDevice, mGattCharacteristicThree, false);//true表示从客户端请求确认（指示），false表示发送通知
                         } catch (NullPointerException e) {
                             Looper.prepare();
