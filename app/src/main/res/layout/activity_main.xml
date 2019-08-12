@@ -47,7 +47,7 @@
         android:id="@+id/stopSendAd"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="停止模拟"
+        android:text="停止发送数据"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@+id/sendAd"
         app:layout_constraintTop_toBottomOf="@+id/heartRate" />
@@ -62,6 +62,7 @@
         android:fadeScrollbars="false"
         android:scrollbars="vertical"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/sendAd" />
 
@@ -71,8 +72,8 @@
         android:layout_height="40dp"
         android:background="@color/colorPrimaryDark"
         android:shadowColor="@color/colorAccent"
-        android:textOff="不可被扫描"
-        android:textOn="可被扫描"
+        android:textOff="(GAP OFF)不可被扫描"
+        android:textOn="(GAP)可被扫描"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

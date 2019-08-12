@@ -40,11 +40,16 @@ import java.util.TimerTask;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+    //Heart Rate Service (shall)
     public static UUID UUID_SERVICE = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb");
+    //Device Information Service(shall)
+    public static UUID UUID_DEVICE_INFORMATION_SERVICE = UUID.fromString("0000180A-0000-1000-8000-00805f9b34fb");
+
     public static UUID UUID_CHARACTERISTIC_CONTROLPOINT = UUID.fromString("00002A39-0000-1000-8000-00805f9b34fb");
     public static UUID UUID_CHARACTERISTIC_LOCATION = UUID.fromString("00002A38-0000-1000-8000-00805f9b34fb");
     public static UUID UUID_CHARACTERISTIC_MEASUREMENT = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb");
     public static UUID UUID_CHARACTERISTIC_MEASUREMENT_Descriptor = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
     private String TAG = "TestStage";
     private boolean Flag = false;
     private TextView tvDataMonitoring;
@@ -63,8 +68,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
     //Gatt服务
     private BluetoothGattService mGattService;
+    //  private BluetoothGattService mDeviceService;
     //Gatt特征
-    private BluetoothGattCharacteristic mGattCharacteristic, mGattCharacteristicTwo, mGattCharacteristicThree;
+    private BluetoothGattCharacteristic mGattCharacteristicControlPoint, mGattCharacteristicLocation, mGattCharacteristicMeasurement;
     //GattService回调
     private BluetoothGattServerCallback mGattServerCallback;
 
@@ -107,11 +113,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
         });
 
-        //开始模拟
+        //开始模拟并发送心跳数据
         btnSendAd.setOnClickListener(this);
-        //关闭模拟
+        //停止发送心跳数据(依旧在连接状态)
         btnStopSendAd.setOnClickListener(this);
-
     }
 
 
@@ -154,14 +159,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mBluetoothAdapter.setName("HeartRateX");
         //初始化广播设置
         mAdvertiseSettings = new AdvertiseSettings.Builder()
+                //设置是否可以连接
+                .setConnectable(true)
                 //设置广播模式，以控制广播的功率和延迟。
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
                 //发射功率级别
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
                 //不得超过180000毫秒。值为0将禁用时间限制。
                 .setTimeout(0)
-                //设置是否可以连接
-                .setConnectable(true)
                 .build();
         //初始化广播包
         mAdvertiseData = new AdvertiseData.Builder()
@@ -169,6 +174,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .setIncludeDeviceName(true)
                 //设置发射功率级别
                 .setIncludeTxPowerLevel(false)
+                .addManufacturerData(0x004c, new byte[0])
                 .build();
         //初始化扫描响应包
         mAdvScanResponse = new AdvertiseData.Builder()
@@ -203,27 +209,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * */
     private void addGattService() {
         mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        //初始化Gattd的Service
+        //初始化GATT的Service
+
         mGattService = new BluetoothGattService(UUID_SERVICE,
                 BluetoothGattService.SERVICE_TYPE_PRIMARY);
+
+      /*  mDeviceService = new BluetoothGattService(UUID_DEVICE_INFORMATION_SERVICE,
+                BluetoothGattService.SERVICE_TYPE_PRIMARY);*/
         //初始化特征值
-        mGattCharacteristic = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_CONTROLPOINT,
+        mGattCharacteristicControlPoint = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_CONTROLPOINT,
                 BluetoothGattCharacteristic.PROPERTY_WRITE,
                 BluetoothGattCharacteristic.PERMISSION_WRITE);
-        mGattCharacteristicTwo = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_LOCATION,
+        mGattCharacteristicLocation = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_LOCATION,
                 BluetoothGattCharacteristic.PROPERTY_READ,
                 BluetoothGattCharacteristic.PERMISSION_READ);
-        mGattCharacteristicThree = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_MEASUREMENT,
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                0);
-        //为service 添加特征
-        mGattService.addCharacteristic(mGattCharacteristic);
-        mGattService.addCharacteristic(mGattCharacteristicTwo);
-        mGattService.addCharacteristic(mGattCharacteristicThree);
+        mGattCharacteristicMeasurement = new BluetoothGattCharacteristic(UUID_CHARACTERISTIC_MEASUREMENT,
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY, 0);
         //为特征添加描述
         mBluetoothGattDescriptor = new BluetoothGattDescriptor(UUID_CHARACTERISTIC_MEASUREMENT_Descriptor, BluetoothGattDescriptor.PERMISSION_READ | BluetoothGattDescriptor.PERMISSION_WRITE);
-        mGattCharacteristicThree.addDescriptor(mBluetoothGattDescriptor);
-
+        mGattCharacteristicMeasurement.addDescriptor(mBluetoothGattDescriptor);
+        //为service 添加特征
+        //Mandatory if the Heart Rate Control Point characteristic is supported, otherwise excluded for this service.
+        //  mGattService.addCharacteristic(mGattCharacteristicControlPoint);
+        mGattService.addCharacteristic(mGattCharacteristicLocation);
+        mGattService.addCharacteristic(mGattCharacteristicMeasurement);
         //添加服务
         mGattServerCallback = new HRBluetoothGattServerCallback();
 
@@ -232,8 +241,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         } catch (Exception e) {
             Log.d(TAG, "addGattService: " + e.toString());
         }
+        // mGattServer.addService(mDeviceService);
         mGattServer.addService(mGattService);
-
     }
 
     /*
@@ -268,7 +277,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public void onStartFailure(int errorCode) {
             super.onStartFailure(errorCode);
-            Log.d(TAG, "开启服务失败，失败码 = " + errorCode);
+            Log.d(TAG, "开启广播失败，失败码 = " + errorCode);
         }
     }
 
@@ -301,7 +310,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //添加本地服务回调
         @Override
         public void onServiceAdded(int status, BluetoothGattService service) {
-
             super.onServiceAdded(status, service);
         }
 
@@ -309,13 +317,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public void onCharacteristicReadRequest(BluetoothDevice device, int requestId, int offset, BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicReadRequest(device, requestId, offset, characteristic);
+            Log.d(TAG, "Device tried to read characteristic: " + characteristic.getUuid());
+            Log.d(TAG, "Value: " + Arrays.toString(characteristic.getValue()));
             if (offset != 0) {
                 mGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_OFFSET, offset,
                         /* value (optional) */ null);
                 return;
             }
-            mGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS,
-                    offset, characteristic.getValue());
         }
 
         //特征值写入回调
@@ -404,11 +412,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     @Override
                     public void run() {
                         try {
-                            mGattCharacteristicThree.setValue(Integer.valueOf(getHeartRateValue()),
+                            mGattCharacteristicMeasurement.setValue(Integer.valueOf(getHeartRateValue()),
                                     BluetoothGattCharacteristic.FORMAT_UINT8, 1);
-                         /*   mGattCharacteristicThree.setValue(1,
-                                    BluetoothGattCharacteristic.FORMAT_UINT16, 0);*/
-                            mGattServer.notifyCharacteristicChanged(mBluetoothDevice, mGattCharacteristicThree, false);//true表示从客户端请求确认（指示），false表示发送通知
+                            mGattServer.notifyCharacteristicChanged(mBluetoothDevice, mGattCharacteristicMeasurement, false);//true表示从客户端请求确认（指示），false表示发送通知
                         } catch (NullPointerException e) {
                             Looper.prepare();
                             ToastUtils.showBottomToast(MainActivity.this, "请先连接设备！！！");
@@ -420,10 +426,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
             case R.id.stopSendAd:
                 Flag = true;
-                addText(tvDataMonitoring, "模拟心跳已停止！ " + DateUtils.getTime());
+                addText(tvDataMonitoring, "已停止发送心跳！ " + DateUtils.getTime());
                 break;
-        }
 
+        }
     }
 
+   /* @Override
+    protected void onDestroy() {
+        //当程序关闭时关闭GATT
+        mGattServer.clearServices();
+        mGattServer.close();
+        super.onDestroy();
+    }*/
 }
